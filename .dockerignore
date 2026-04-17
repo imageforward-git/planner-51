@@ -1,8 +1,10 @@
-node_modules
-.turbo
-dist
-.output
+**/node_modules
+**/.turbo
+**/dist
+**/.output
 .env
+.env.local
 .git
 .github
 .fly
+*.log
