@@ -36,11 +36,10 @@ export const workspaceRouter = router({
   }),
 
   invite: workspaceProcedure
-    .input(z.object({ workspaceId: z.string().uuid(), email: z.string().email(), role: z.string().default("member") }))
+    .input(z.object({ workspaceId: z.string().uuid(), username: z.string().min(1), role: z.string().default("member") }))
     .mutation(async ({ input }) => {
-      // For MVP: just add by email if user exists
       const { users } = await import("@planner51/db");
-      const user = await db.select().from(users).where(eq(users.email, input.email)).then(r => r[0]);
+      const user = await db.select().from(users).where(eq(users.username, input.username)).then(r => r[0]);
       if (!user) throw new Error("User not found");
 
       await db.insert(workspaceMembers).values({

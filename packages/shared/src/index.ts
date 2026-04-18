@@ -4,15 +4,14 @@ export const ItemType = z.enum(["task", "note", "doc"]);
 export type ItemType = z.infer<typeof ItemType>;
 
 export const SignUpInput = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(1).optional(),
+  username: z.string().min(1).max(255),
+  password: z.string().min(1),
 });
 export type SignUpInput = z.infer<typeof SignUpInput>;
 
 export const SignInInput = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+  username: z.string().min(1),
+  password: z.string().min(1),
 });
 export type SignInInput = z.infer<typeof SignInInput>;
 

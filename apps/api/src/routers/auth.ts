@@ -5,45 +5,43 @@ import { db, users } from "@planner51/db";
 import { eq } from "drizzle-orm";
 import { SignUpInput, SignInInput } from "@planner51/shared";
 import bcrypt from "bcrypt";
-import { generateIdFromEntropySize } from "lucia";
 
 export const authRouter = router({
   signUp: publicProcedure.input(SignUpInput).mutation(async ({ input, ctx }) => {
-    const existing = await db.select().from(users).where(eq(users.email, input.email)).then(r => r[0]);
+    const existing = await db.select().from(users).where(eq(users.username, input.username)).then(r => r[0]);
     if (existing) {
-      throw new Error("Email already in use");
+      throw new Error("Username already taken");
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);
     const [user] = await db.insert(users).values({
-      email: input.email,
+      username: input.username,
       passwordHash,
-      name: input.name ?? null,
     }).returning();
 
     const session = await lucia.createSession(user.id, {});
     const cookie = lucia.createSessionCookie(session.id);
     ctx.res.header("Set-Cookie", cookie.serialize());
 
-    return { id: user.id, email: user.email, name: user.name };
+    return { id: user.id, username: user.username };
   }),
 
   signIn: publicProcedure.input(SignInInput).mutation(async ({ input, ctx }) => {
-    const user = await db.select().from(users).where(eq(users.email, input.email)).then(r => r[0]);
+    const user = await db.select().from(users).where(eq(users.username, input.username)).then(r => r[0]);
     if (!user || !user.passwordHash) {
-      throw new Error("Invalid email or password");
+      throw new Error("Invalid username or password");
     }
 
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
-      throw new Error("Invalid email or password");
+      throw new Error("Invalid username or password");
     }
 
     const session = await lucia.createSession(user.id, {});
     const cookie = lucia.createSessionCookie(session.id);
     ctx.res.header("Set-Cookie", cookie.serialize());
 
-    return { id: user.id, email: user.email, name: user.name };
+    return { id: user.id, username: user.username };
   }),
 
   signOut: protectedProcedure.mutation(async ({ ctx }) => {
@@ -55,6 +53,6 @@ export const authRouter = router({
 
   me: publicProcedure.query(async ({ ctx }) => {
     if (!ctx.user) return null;
-    return { id: ctx.user.id, email: ctx.user.email, name: ctx.user.name };
+    return { id: ctx.user.id, username: ctx.user.username };
   }),
 });
