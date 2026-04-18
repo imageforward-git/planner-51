@@ -1,24 +1,72 @@
 import { z } from "zod";
 import { router, workspaceProcedure, protectedProcedure } from "../trpc.js";
 import { db, items, itemLinks } from "@planner51/db";
-import { eq, and, isNull, sql } from "drizzle-orm";
-import { CreateItemInput, UpdateItemInput, ItemFilter } from "@planner51/shared";
+import { eq, and, isNull, sql, asc, desc } from "drizzle-orm";
+import { CreateItemInput, UpdateItemInput, ItemFilter, ItemPriority } from "@planner51/shared";
 import { parseWikilinks } from "../lib/wikilinks.js";
+
+const SortBy = z.enum(["created_at", "due_date", "priority", "position"]).default("created_at");
+
+const priorityOrder = sql`CASE ${items.priority}
+  WHEN 'urgent' THEN 1
+  WHEN 'high'   THEN 2
+  WHEN 'medium' THEN 3
+  WHEN 'low'    THEN 4
+  WHEN 'none'   THEN 5
+  ELSE 6
+END`;
 
 export const itemRouter = router({
   list: workspaceProcedure
     .input(z.object({
       workspaceId: z.string().uuid(),
       filter: ItemFilter.optional(),
+      sortBy: SortBy.optional(),
     }))
     .query(async ({ input }) => {
-      let query = db.select().from(items).where(
-        and(
-          eq(items.workspaceId, input.workspaceId),
-          isNull(items.deletedAt)
-        )
-      );
-      return query;
+      const conditions = [
+        eq(items.workspaceId, input.workspaceId),
+        isNull(items.deletedAt),
+      ];
+
+      if (input.filter?.status) {
+        conditions.push(eq(items.status, input.filter.status));
+      }
+      if (input.filter?.priority) {
+        conditions.push(eq(items.priority, input.filter.priority));
+      }
+      if (input.filter?.type) {
+        conditions.push(eq(items.type, input.filter.type));
+      }
+      if (input.filter?.parentId !== undefined) {
+        if (input.filter.parentId === null) {
+          conditions.push(isNull(items.parentId));
+        } else {
+          conditions.push(eq(items.parentId, input.filter.parentId));
+        }
+      }
+
+      const sortBy = input.sortBy ?? "created_at";
+      let orderExpr;
+      switch (sortBy) {
+        case "due_date":
+          orderExpr = asc(items.dueDate);
+          break;
+        case "priority":
+          orderExpr = asc(priorityOrder);
+          break;
+        case "position":
+          orderExpr = asc(items.position);
+          break;
+        case "created_at":
+        default:
+          orderExpr = desc(items.createdAt);
+          break;
+      }
+
+      return db.select().from(items)
+        .where(and(...conditions))
+        .orderBy(orderExpr);
     }),
 
   get: protectedProcedure
@@ -38,6 +86,9 @@ export const itemRouter = router({
         title: input.title,
         content: input.content ?? null,
         properties: input.properties ?? null,
+        status: input.status ?? "todo",
+        priority: input.priority ?? "none",
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
         createdBy: ctx.user.id,
       }).returning();
 
@@ -59,6 +110,12 @@ export const itemRouter = router({
       if (data.properties !== undefined) updateData.properties = data.properties;
       if (data.status !== undefined) updateData.status = data.status;
       if (data.parentId !== undefined) updateData.parentId = data.parentId;
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.dueDate !== undefined) {
+        updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
+      }
+      if (data.assignedTo !== undefined) updateData.assignedTo = data.assignedTo;
+      if (data.position !== undefined) updateData.position = data.position;
 
       const [item] = await db.update(items).set(updateData).where(eq(items.id, id)).returning();
 
@@ -68,6 +125,22 @@ export const itemRouter = router({
       }
 
       return item;
+    }),
+
+  reorder: protectedProcedure
+    .input(z.object({
+      items: z.array(z.object({
+        id: z.string().uuid(),
+        position: z.number().int(),
+      })),
+    }))
+    .mutation(async ({ input }) => {
+      for (const { id, position } of input.items) {
+        await db.update(items)
+          .set({ position, updatedAt: new Date() })
+          .where(eq(items.id, id));
+      }
+      return { success: true };
     }),
 
   delete: protectedProcedure

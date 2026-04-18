@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   index,
   unique,
+  integer,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -103,7 +104,11 @@ export const items = pgTable(
     title: varchar("title", { length: 500 }).notNull(),
     content: text("content"),
     properties: jsonb("properties"),
-    status: varchar("status", { length: 50 }).default("active"),
+    status: varchar("status", { length: 50 }).default("todo"),
+    priority: varchar("priority", { length: 20 }).default("none"),
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    assignedTo: uuid("assigned_to").references(() => users.id),
+    position: integer("position").default(0),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

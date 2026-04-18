@@ -15,6 +15,13 @@
       "when": 1776468000000,
       "tag": "0001_auth_username",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776554400000,
+      "tag": "0002_task_metadata",
+      "breakpoints": true
     }
   ]
 }

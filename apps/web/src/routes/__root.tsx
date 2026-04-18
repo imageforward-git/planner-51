@@ -3,6 +3,7 @@ import { WorkspaceHome } from "../pages/WorkspaceHome";
 import { ItemView } from "../pages/ItemView";
 import { GraphView } from "../pages/GraphView";
 import { SearchPage } from "../pages/SearchPage";
+import { BoardView } from "../pages/BoardView";
 import { SetupRedirect } from "../pages/SetupRedirect";
 
 const rootRoute = createRootRoute({
@@ -43,10 +44,17 @@ const searchRoute = createRoute({
   component: SearchPage,
 });
 
+const boardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/w/$slug/board",
+  component: BoardView,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   workspaceRoute,
   itemRoute,
   graphRoute,
   searchRoute,
+  boardRoute,
 ]);
