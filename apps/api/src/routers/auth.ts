@@ -2,20 +2,21 @@ import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../trpc.js";
 import { lucia } from "../auth.js";
 import { db, users } from "@planner51/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { SignUpInput, SignInInput } from "@planner51/shared";
 import bcrypt from "bcrypt";
 
 export const authRouter = router({
   signUp: publicProcedure.input(SignUpInput).mutation(async ({ input, ctx }) => {
-    const existing = await db.select().from(users).where(eq(users.username, input.username)).then(r => r[0]);
+    const lower = input.username.toLowerCase();
+    const existing = await db.select().from(users).where(sql`lower(${users.username}) = ${lower}`).then(r => r[0]);
     if (existing) {
       throw new Error("Username already taken");
     }
 
     const passwordHash = await bcrypt.hash(input.password, 10);
     const [user] = await db.insert(users).values({
-      username: input.username,
+      username: lower,
       passwordHash,
     }).returning();
 
@@ -27,7 +28,8 @@ export const authRouter = router({
   }),
 
   signIn: publicProcedure.input(SignInInput).mutation(async ({ input, ctx }) => {
-    const user = await db.select().from(users).where(eq(users.username, input.username)).then(r => r[0]);
+    const lower = input.username.toLowerCase();
+    const user = await db.select().from(users).where(sql`lower(${users.username}) = ${lower}`).then(r => r[0]);
     if (!user || !user.passwordHash) {
       throw new Error("Invalid username or password");
     }
