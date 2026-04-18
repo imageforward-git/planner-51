@@ -1,26 +1,23 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import type { CreateFastifyContextOptions } from "@trpc/server/adapters/fastify";
-import { lucia } from "./auth.js";
 import { db } from "@planner51/db";
-import { workspaceMembers } from "@planner51/db";
-import { eq, and } from "drizzle-orm";
+import { users, workspaceMembers } from "@planner51/db";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
-export async function createContext({ req, res }: CreateFastifyContextOptions) {
-  const cookies = (req as any).cookies as Record<string, string> | undefined;
-  const sessionId = cookies?.auth_session ?? null;
-  if (!sessionId) return { user: null, session: null, db, res };
+// Auto-authenticate as the "selah" system user on every request
+let cachedUser: { id: string; username: string } | null = null;
 
-  const { session, user } = await lucia.validateSession(sessionId);
-  if (session?.fresh) {
-    const cookie = lucia.createSessionCookie(session.id);
-    res.header("Set-Cookie", cookie.serialize());
-  }
-  if (!session) {
-    const cookie = lucia.createBlankSessionCookie();
-    res.header("Set-Cookie", cookie.serialize());
-  }
-  return { user, session, db, res };
+async function getSystemUser() {
+  if (cachedUser) return cachedUser;
+  const row = await db.select().from(users).where(sql`lower(${users.username}) = 'selah'`).then(r => r[0]);
+  if (row) cachedUser = { id: row.id, username: row.username };
+  return cachedUser;
+}
+
+export async function createContext({ req, res }: CreateFastifyContextOptions) {
+  const user = await getSystemUser();
+  return { user, session: { id: "system" }, db, res };
 }
 
 type Context = Awaited<ReturnType<typeof createContext>>;
@@ -31,15 +28,16 @@ export const router = t.router;
 export const publicProcedure = t.procedure;
 
 export const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
-  if (!ctx.user || !ctx.session) {
+  if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED" });
   }
-  return next({ ctx: { ...ctx, user: ctx.user, session: ctx.session } });
+  return next({ ctx: { ...ctx, user: ctx.user!, session: ctx.session! } });
 });
 
 export const workspaceProcedure = protectedProcedure
   .input(z.object({ workspaceId: z.string().uuid() }))
   .use(async ({ ctx, input, next }) => {
+    // Auto-add selah to any workspace they access
     const member = await db
       .select()
       .from(workspaceMembers)
@@ -52,8 +50,13 @@ export const workspaceProcedure = protectedProcedure
       .then((rows) => rows[0]);
 
     if (!member) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Not a workspace member" });
+      // Auto-join as owner
+      await db.insert(workspaceMembers).values({
+        workspaceId: input.workspaceId,
+        userId: ctx.user.id,
+        role: "owner",
+      });
     }
 
-    return next({ ctx: { ...ctx, member, workspaceId: input.workspaceId } });
+    return next({ ctx: { ...ctx, member: member ?? { role: "owner" }, workspaceId: input.workspaceId } });
   });

@@ -1,9 +1,9 @@
-import { createRootRoute, createRoute, Outlet, Link, redirect, createRouter } from "@tanstack/react-router";
-import { LoginPage } from "../pages/Login";
+import { createRootRoute, createRoute, Outlet, Link, redirect, createRouter, Navigate } from "@tanstack/react-router";
 import { WorkspaceHome } from "../pages/WorkspaceHome";
 import { ItemView } from "../pages/ItemView";
 import { GraphView } from "../pages/GraphView";
 import { SearchPage } from "../pages/SearchPage";
+import { SetupRedirect } from "../pages/SetupRedirect";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -16,16 +16,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => {
-    // Redirect to login for now
-    return <LoginPage />;
-  },
-});
-
-const loginRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/login",
-  component: LoginPage,
+  component: SetupRedirect,
 });
 
 const workspaceRoute = createRoute({
@@ -54,7 +45,6 @@ const searchRoute = createRoute({
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
-  loginRoute,
   workspaceRoute,
   itemRoute,
   graphRoute,
